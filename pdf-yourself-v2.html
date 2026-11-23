@@ -86,10 +86,11 @@ button{font:inherit;color:inherit}
 .mark{position:absolute;touch-action:none;cursor:move;line-height:0;z-index:2}
 .mark img{width:100%;height:100%;display:block;pointer-events:none;user-select:none;-webkit-user-drag:none}
 .mark.sel{outline:2px solid var(--blue);outline-offset:2px;background:var(--blue-soft)}
-.mark .del,.mark .grip{position:absolute;display:none;border:0;padding:0;background:var(--blue);color:#fff;border-radius:50%;width:30px;height:30px;line-height:30px;text-align:center;font-size:18px;font-weight:700;touch-action:none}
-.mark.sel .del,.mark.sel .grip{display:block}
-.mark .del{top:-34px;right:-16px;cursor:pointer}
-.mark .grip{bottom:-18px;right:-18px;cursor:nwse-resize;font-size:15px}
+.mark .del{display:none}
+.mark .grip{position:absolute;display:none;top:-30px;right:-30px;width:24px;height:24px;border-radius:50%;background:var(--blue);border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);touch-action:none;cursor:nesw-resize}
+.mark .grip::before{content:"";position:absolute;inset:-14px;border-radius:50%}
+.mark.sel .grip{display:block}
+.btn.sq{width:48px;justify-content:center;font-size:22px;font-weight:700;padding:0;color:var(--blue);border-color:var(--blue)}
 .placebar,.toast{position:fixed;left:50%;transform:translateX(-50%);z-index:15;width:calc(100% - 24px);max-width:620px;bottom:calc(12px + env(safe-area-inset-bottom,0px));
   background:var(--surface);border:2px solid var(--blue);border-radius:14px;padding:12px 14px;box-shadow:0 8px 28px rgba(20,30,50,.22);line-height:1.4}
 .placebar p{margin:0 0 8px;font-size:14px}
@@ -133,7 +134,7 @@ button{font:inherit;color:inherit}
       <span class="spacer"></span>
       <label class="toggle"><input type="checkbox" id="showToggle" checked> Highlight editable text</label>
     </div>
-    <p class="help">Tap any highlighted line to change what it says. The new text is set in a standard font matched to the original size, weight and color. Edited lines get a green outline. To sign or fill in a blank, tap Signature, Initials or Text box, then tap just above the line on the form. It sizes itself to the open space over that line. Drag it to move it, pull the corner to resize it, or tap it and hit Remove. Your file and your signature never leave your device.</p>
+    <p class="help">Tap any highlighted line to change what it says. The new text is set in a standard font matched to the original size, weight and color. Edited lines get a green outline. To sign or fill in a blank, tap Signature, Initials or Text box, then tap just above the line on the form. It sizes itself to the open space over that line. Drag it to move it. Tap it to size it with the plus and minus buttons or the corner dot, or to remove it. Your file and your signature never leave your device.</p>
     <div class="status" id="status" role="status"></div>
     <div class="pages show" id="pages"></div>
   </div>
@@ -185,8 +186,10 @@ button{font:inherit;color:inherit}
 <div class="markbar" id="markbar" hidden>
   <div class="row">
     <button class="btn danger" id="markDel" type="button">Remove</button>
-    <button class="btn" id="markEdit" type="button">Change text</button>
+    <button class="btn" id="markEdit" type="button">Edit</button>
     <span class="spacer"></span>
+    <button class="btn sq" id="markSmaller" type="button" aria-label="Smaller">−</button>
+    <button class="btn sq" id="markBigger" type="button" aria-label="Bigger">+</button>
     <button class="btn primary" id="markDone" type="button">Done</button>
   </div>
 </div>
@@ -600,6 +603,15 @@ $('textCancel').addEventListener('click',()=>{ $('textSheet').hidden=true; textT
 $('textInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); saveText(); } });
 $('markDel').addEventListener('click',()=>{ if(S.sel) removeMark(S.sel); });
 $('markDone').addEventListener('click',()=>selectMark(null));
+function holdStep(btn,f){
+  let t=null, iv=null;
+  const step=()=>{ if(S.sel) resizeMark(S.sel, S.sel.w*f); };
+  const stop=()=>{ clearTimeout(t); clearInterval(iv); t=iv=null; };
+  btn.addEventListener('pointerdown',e=>{ e.preventDefault(); step(); t=setTimeout(()=>{ iv=setInterval(step,90); },400); });
+  ['pointerup','pointercancel','pointerleave'].forEach(k=>btn.addEventListener(k,stop));
+}
+holdStep($('markSmaller'),1/1.1);
+holdStep($('markBigger'),1.1);
 $('markEdit').addEventListener('click',()=>{ if(S.sel && S.sel.kind==='text') openText(S.sel); });
 $('sigBtn').addEventListener('click',()=>beginSign('sig'));
 $('initBtn').addEventListener('click',()=>beginSign('init'));
@@ -687,7 +699,7 @@ function onPageTap(e,P0){
     l=Math.max(0,Math.min(W-w,l)); t=Math.max(0,Math.min(H-h,t));
     const m={id:++S.markSeq, kind, text:kind==='text'?mem.textValue:null, pageIndex:P0.index, src, aspect, l:l/W*100, t:t/H*100, w:w/W*100, h:h/H*100};
     S.marks.push(m); renderMark(m); stopPlacing(); selectMark(m); updateCount(); setStatus('');
-    toast(hit ? 'Placed on the line. Drag to move it, pull the corner to resize it.' : 'No line found there, so it was placed where you tapped. Drag it onto the line.');
+    toast(hit ? 'Placed on the line. Drag it to move it, use plus and minus to size it.' : 'No line found there, so it was placed where you tapped. Drag it onto the line.');
   };
   img.src=src;
 }
@@ -695,7 +707,7 @@ function onPageTap(e,P0){
 function renderMark(m){
   const P0=S.pages[m.pageIndex];
   const el=document.createElement('div'); el.className='mark';
-  el.innerHTML='<img alt=""><button class="del" type="button" aria-label="Remove">×</button><span class="grip" aria-hidden="true">⤡</span>';
+  el.innerHTML='<img alt=""><button class="del" type="button" aria-label="Remove">×</button><span class="grip" aria-hidden="true"></span>';
   el.querySelector('img').src=m.src;
   m.el=el; placeMarkEl(m); P0.wrap.appendChild(el);
   el.addEventListener('click',e=>e.stopPropagation());
@@ -712,15 +724,23 @@ function renderMark(m){
   });
   grip.addEventListener('pointerdown',e=>{
     e.preventDefault(); e.stopPropagation(); selectMark(m); grip.setPointerCapture(e.pointerId);
-    const r=P0.wrap.getBoundingClientRect(), sx=e.clientX, ow=m.w, ratio=r.width/r.height;
+    const r=P0.wrap.getBoundingClientRect(), sx=e.clientX, sy=e.clientY;
+    const owPx=m.w/100*r.width, ohPx=m.h/100*r.height, bottom=m.t+m.h;
     const mv=ev=>{
-      let w=Math.max(3, ow+(ev.clientX-sx)/r.width*100);
-      w=Math.min(w, 100-m.l, (100-m.t)*m.aspect/ratio);
-      m.w=w; m.h=w/m.aspect*ratio; placeMarkEl(m);
+      const dx=ev.clientX-sx, dy=sy-ev.clientY;
+      const grow=(dx + dy*owPx/ohPx)/2;
+      resizeMark(m, (owPx+grow)/r.width*100, bottom);
     };
     const up=()=>{ grip.removeEventListener('pointermove',mv); grip.removeEventListener('pointerup',up); grip.removeEventListener('pointercancel',up); };
     grip.addEventListener('pointermove',mv); grip.addEventListener('pointerup',up); grip.addEventListener('pointercancel',up);
   });
+}
+function resizeMark(m, w, bottom){
+  const r=S.pages[m.pageIndex].wrap.getBoundingClientRect(), ratio=r.width/r.height;
+  if(bottom==null) bottom=m.t+m.h;
+  w=Math.max(6/r.width*100, w);
+  w=Math.min(w, 100-m.l, 100*m.aspect/ratio);
+  m.w=w; m.h=w/m.aspect*ratio; m.t=Math.max(0, Math.min(100-m.h, bottom-m.h)); placeMarkEl(m);
 }
 function placeMarkEl(m){ const s=m.el.style; s.left=m.l+'%'; s.top=m.t+'%'; s.width=m.w+'%'; s.height=m.h+'%'; }
 function selectMark(m){
