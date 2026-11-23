@@ -316,13 +316,8 @@ async function loadPdf(bytes, name, isSample){
       line.el=btn; wrap.appendChild(btn); S.lines.push(line);
     }
     total+=lines.length;
-    if(!lines.length){
-      const n=document.createElement('div'); n.className='empty-pg';
-      n.textContent='No editable text on this page. Scanned pages are pictures of text, so their words cannot be changed here.';
-      wrap.appendChild(n);
-    }
   }
-  setStatus(total ? '' : 'No editable text was found in this PDF.', total?'':'err');
+  setStatus('');
 }
 
 function paintLine(line){
@@ -566,12 +561,21 @@ function findLine(ctx,cx,cy){
     j=b;
   }
   if(!best) return null;
-  const row=ctx.getImageData(0,best.row,W,1).data;
-  let L=best.col, R=best.col, gap=0;
-  for(let i=best.col-1;i>=0;i--){ if(isDark(row,i*4)){L=i;gap=0;} else if(++gap>3) break; }
-  gap=0;
-  for(let i=best.col+1;i<W;i++){ if(isDark(row,i*4)){R=i;gap=0;} else if(++gap>3) break; }
-  const top=best.row, span=R-L, maxUp=Math.round(W*0.12);
+  const band=Math.max(6,Math.round(W*0.012)), by0=Math.max(0,best.row-band), bh2=Math.min(H,best.row+band+1)-by0;
+  const bd=ctx.getImageData(0,by0,W,bh2).data;
+  const at=(i,y)=>y>=0&&y<bh2&&isDark(bd,(y*W+i)*4);
+  const walk=dir=>{
+    let y=best.row-by0, end=best.col, gap=0, topY=y;
+    for(let i=best.col+dir;i>=0&&i<W;i+=dir){
+      let ny=-1;
+      if(at(i,y)) ny=y; else if(at(i,y-1)) ny=y-1; else if(at(i,y+1)) ny=y+1;
+      if(ny>=0){ y=ny; end=i; gap=0; if(y<topY) topY=y; } else if(++gap>4) break;
+    }
+    return {end, topY};
+  };
+  const wl=walk(-1), wr=walk(1);
+  let L=wl.end, R=wr.end;
+  const top=Math.min(best.row, by0+wl.topY, by0+wr.topY), span=R-L, maxUp=Math.round(W*0.12);
   const ax0=L+Math.round(span*0.02)+2, aw=Math.max(1,R-L-Math.round(span*0.04)-4);
   const ay0=Math.max(0,top-maxUp), ah=top-2-ay0;
   let avail=maxUp;
